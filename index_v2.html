@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>i2 Energy — O&M Job Order Log</title>
+<style>
+  :root{
+    --navy:#14284B; --navy-soft:#1E3A66;
+    --teal:#0E7C7B; --teal-soft:#E0F2F1;
+    --bg:#F0F2F5; --panel:#FFFFFF;
+    --ink:#1B2430; --ink-soft:#5B6675; --line:#D8DDE4;
+    --amber:#B4740E; --amber-soft:#FBF0DC;
+    --green:#227A4D; --green-soft:#E3F3E9;
+    --red:#B7302B; --red-soft:#FBE7E6;
+    --slate:#5B6675; --slate-soft:#E9EBEE;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:'Consolas','Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px}
+
+  header{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header .brand{font-weight:700;font-size:17px;letter-spacing:.3px}
+  header .brand span{color:#7FD1D0;font-weight:500}
+  header .spacer{flex:1}
+  .btn{border:0;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+  .btn-teal{background:var(--teal);color:#fff}
+  .btn-teal:hover{background:#0A6362}
+  .btn-ghost{background:transparent;color:#C9D4E4;border:1px solid #3B527D}
+  .btn-ghost:hover{background:var(--navy-soft)}
+  .btn-navy{background:var(--navy);color:#fff}
+  .btn-quiet{background:var(--slate-soft);color:var(--ink)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  #statusBar{padding:8px 18px;font-size:13px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  #statusBar .dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block}
+  #statusBar.err .dot{background:var(--red)}
+  #whoami{cursor:pointer;text-decoration:underline;color:var(--teal)}
+
+  /* dashboard stats */
+  #stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:4px 18px 12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .stat .num{font-size:26px;font-weight:800;line-height:1}
+  .stat .lbl{font-size:11.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-top:5px}
+  .stat.warn .num{color:var(--amber)}
+  .stat.bad .num{color:var(--red)}
+  .stat.good .num{color:var(--green)}
+
+  /* tabs */
+  #tabs{display:flex;gap:4px;padding:0 18px;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:0;padding:10px 14px;font-size:14.5px;font-weight:700;color:var(--ink-soft);cursor:pointer;border-bottom:3px solid transparent;font-family:var(--sans)}
+  .tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+
+  /* board */
+  #board{display:flex;gap:12px;padding:14px 18px 30px;overflow-x:auto;align-items:flex-start}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:270px;width:270px;flex-shrink:0;display:flex;flex-direction:column;max-height:calc(100vh - 260px)}
+  .col-head{padding:12px 14px;border-bottom:2px solid var(--line);font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:var(--panel);border-radius:12px 12px 0 0}
+  .col-head .count{margin-left:auto;background:var(--slate-soft);color:var(--ink-soft);border-radius:10px;padding:1px 9px;font-size:12px}
+  .col-body{padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;min-height:60px}
+  .col[data-status="New"] .col-head{border-bottom-color:var(--teal)}
+  .col[data-status="In Progress"] .col-head{border-bottom-color:var(--amber)}
+  .col[data-status="On Hold"] .col-head{border-bottom-color:var(--slate)}
+  .col[data-status="Completed"] .col-head{border-bottom-color:var(--green)}
+  .col[data-status="Cancelled"] .col-head{border-bottom-color:var(--red)}
+
+  .card{border:1px solid var(--line);border-radius:10px;padding:11px 12px;cursor:pointer;background:#fff}
+  .card:hover{border-color:var(--teal);box-shadow:0 2px 6px rgba(20,40,75,.10)}
+  .card .tno{font-family:var(--mono);font-size:12.5px;color:var(--navy);font-weight:700}
+  .card .site{font-weight:600;margin:4px 0 2px;font-size:14px}
+  .card .desc{color:var(--ink-soft);font-size:13px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tag{font-size:11.5px;border-radius:6px;padding:2px 7px;font-weight:600}
+  .tag-assignee{background:var(--teal-soft);color:var(--teal)}
+  .tag-priority-High{background:var(--amber-soft);color:var(--amber)}
+  .tag-priority-Urgent{background:var(--red-soft);color:var(--red)}
+  .tag-overdue{background:var(--red);color:#fff}
+  .tag-due{background:var(--slate-soft);color:var(--ink-soft)}
+  .tag-status{background:var(--slate-soft);color:var(--ink)}
+  .empty-col{color:var(--ink-soft);font-size:13px;text-align:center;padding:14px 6px}
+
+  /* history & reports */
+  #historyView{display:none;padding:14px 18px 40px}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .filters input,.filters select{width:auto;min-width:150px;flex:1;max-width:260px}
+  .hitem{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:8px;cursor:pointer}
+  .hitem:hover{border-color:var(--teal)}
+  .hitem .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .hitem .tno{font-family:var(--mono);font-weight:700;color:var(--navy);font-size:12.5px}
+  .hitem .site{font-weight:600}
+  .hitem .sub{font-size:12.5px;color:var(--ink-soft);margin-top:3px}
+  .report{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px}
+  .report h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .rrow{display:flex;justify-content:space-between;font-size:14px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .rrow:last-child{border-bottom:0}
+  .rrow b{font-family:var(--mono)}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(16,24,40,.55);display:none;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;z-index:50}
+  .overlay.open{display:flex}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:560px;padding:20px}
+  .modal h2{margin:0 0 4px;font-size:18px;color:var(--navy)}
+  .modal .sub{color:var(--ink-soft);font-size:13px;margin-bottom:14px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:12px 0 4px}
+  input,select,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;font-family:var(--sans);background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);border-color:var(--teal)}
+  textarea{resize:vertical;min-height:70px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-actions{display:flex;gap:10px;margin-top:18px;justify-content:flex-end;flex-wrap:wrap}
+  .req::after{content:" *";color:var(--red)}
+
+  .remarks{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+  .remark{padding:8px 10px;border-left:3px solid var(--teal);background:var(--bg);border-radius:0 8px 8px 0;margin-bottom:8px}
+  .remark .rmeta{font-size:11.5px;color:var(--ink-soft);margin-bottom:2px;font-family:var(--mono)}
+  .remark .rtext{font-size:13.5px}
+  .remark img{max-width:100%;border-radius:8px;margin-top:6px;display:block}
+  .photobtn{margin-top:6px;font-size:12.5px;background:var(--teal-soft);color:var(--teal);border:0;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:700}
+  .addremark{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .addremark input[type=text]{flex:1;min-width:170px}
+  .photo-row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .photo-row .fname{font-size:12.5px;color:var(--ink-soft)}
+  #dPhotoPrev{max-height:70px;border-radius:8px;display:none}
+
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;display:none;z-index:99;max-width:92vw}
+  .toast.show{display:block}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  @media (max-width:640px){
+    header .brand{font-size:15px}
+    .col{min-width:82vw;width:82vw}
+    .row2{grid-template-columns:1fr}
+    #stats{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">i2 ENERGY <span>| O&amp;M Job Order Log</span></div>
+  <div class="spacer"></div>
+  <button class="btn btn-ghost" id="btnRefresh" onclick="loadJobs()">Refresh</button>
+  <button class="btn btn-teal" onclick="openNewJob()">+ New Job Order</button>
+</header>
+
+<div id="statusBar">
+  <span class="dot"></span><span id="statusText">Loading…</span>
+  <span style="margin-left:auto">You: <span id="whoami" onclick="openNamePrompt()">set your name</span></span>
+</div>
+
+<div id="stats"></div>
+
+<div id="tabs">
+  <button class="tab active" id="tabBoard" onclick="showTab('board')">Board</button>
+  <button class="tab" id="tabHistory" onclick="showTab('history')">History &amp; Reports</button>
+</div>
+
+<div id="board"></div>
+
+<div id="historyView">
+  <div class="filters">
+    <input type="text" id="fSearch" placeholder="Search ticket, site, description…" oninput="renderHistory()">
+    <select id="fStatus" onchange="renderHistory()">
+      <option value="">All statuses</option>
+      <option>New</option><option>In Progress</option><option>On Hold</option>
+      <option>Completed</option><option>Cancelled</option>
+    </select>
+    <select id="fAssignee" onchange="renderHistory()"></select>
+  </div>
+  <div id="historyList"></div>
+
+  <div class="report">
+    <h3>By Status</h3>
+    <div id="repStatus"></div>
+  </div>
+  <div class="report">
+    <h3>By Technician (open / completed)</h3>
+    <div id="repTech"></div>
+  </div>
+  <div class="report">
+    <h3>By Intake Channel</h3>
+    <div id="repChannel"></div>
+  </div>
+</div>
+
+<!-- Name prompt -->
+<div class="overlay" id="nameOverlay">
+  <div class="modal" style="max-width:400px">
+    <h2>Who is using this device?</h2>
+    <div class="sub">Your name will be used for "Received By" and remarks. Saved on this device only — set it once.</div>
+    <label class="req">Your name</label>
+    <input id="nameInput" placeholder="e.g. Izzat">
+    <div class="modal-actions">
+      <button class="btn btn-teal" onclick="saveName()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Job modal -->
+<div class="overlay" id="newJobOverlay">
+  <div class="modal">
+    <h2>New Job Order</h2>
+    <div class="sub">Ticket number is generated automatically when saved.</div>
+    <div class="row2">
+      <div>
+        <label class="req">Intake Channel</label>
+        <select id="njChannel">
+          <option>Verbal</option><option>Phone</option><option>Text/WhatsApp</option>
+          <option>Email</option><option>Walk-in</option><option>Radio</option>
+        </select>
+      </div>
+      <div>
+        <label class="req">Site / Location</label>
+        <input id="njSite" placeholder="e.g. Plant A - Inverter 3">
+      </div>
+    </div>
+    <label class="req">Job Description</label>
+    <textarea id="njDesc" placeholder="What was reported? What needs to be done?"></textarea>
+    <div class="row2">
+      <div>
+        <label>Reported By</label>
+        <input id="njReportedBy" placeholder="Who reported the issue">
+      </div>
+      <div>
+        <label class="req">Received By (you)</label>
+        <input id="njReceivedBy" placeholder="Your name">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Assign To</label>
+        <select id="njAssigned"></select>
+      </div>
+      <div>
+        <label>Priority</label>
+        <select id="njPriority">
+          <option>Low</option><option selected>Normal</option><option>High</option><option>Urgent</option>
+        </select>
+      </div>
+    </div>
+    <label>Due Date</label>
+    <input type="date" id="njDue">
+    <div class="modal-actions">
+      <button class="btn btn-quiet" onclick="closeNewJob()">Cancel</button>
+      <button class="btn btn-teal" id="btnSaveJob" onclick="saveNewJob()">Save Job Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div class="overlay" id="detailOverlay">
+  <div class="modal">
+    <h2 id="dTicket" style="font-family:var(--mono)"></h2>
+    <div class="sub" id="dCreated"></div>
+    <div style="font-size:14px"><b id="dSite"></b></div>
+    <div style="font-size:13.5px;color:var(--ink-soft);margin-top:4px" id="dDesc"></div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px" id="dPeople"></div>
+
+    <div class="row2">
+      <div>
+        <label>Status</label>
+        <select id="dStatus">
+          <option>New</option><option>In Progress</option><option>On Hold</option>
+          <option>Completed</option><option>Cancelled</option>
+        </select>
+      </div>
+      <div>
+        <label>Assigned To</label>
+        <select id="dAssigned"></select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Priority</label>
+        <select id="dPriority">
+          <option>Low</option><option>Normal</option><option>High</option><option>Urgent</option>
+        </select>
+      </div>
+      <div>
+        <label>Due Date</label>
+        <input type="date" id="dDue">
+      </div>
+    </div>
+
+    <div class="remarks">
+      <label style="margin-top:0">Remarks Log</label>
+      <div id="dRemarks"></div>
+      <div class="addremark">
+        <input type="text" id="dNewRemark" placeholder="Add a remark…">
+        <button class="btn btn-navy" id="btnAddRemark" onclick="submitRemark()">Add</button>
+      </div>
+      <div class="photo-row">
+        <label class="btn btn-quiet" style="margin:0">
+          📷 Attach photo
+          <input type="file" id="dPhoto" accept="image/*" style="display:none" onchange="photoChosen()">
+        </label>
+        <span class="fname" id="dPhotoName"></span>
+        <img id="dPhotoPrev" alt="preview">
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-quiet" onclick="closeDetail()">Close</button>
+      <button class="btn btn-teal" id="btnSaveChanges" onclick="saveChanges()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= CONFIGURATION ================= */
+var API_URL = 'https://script.google.com/macros/s/AKfycbzu0PYjJG9bO09UOyIs9Tr9Zg4iSkIgFFTatzpBYTp6LiG_1VtBWHPH2LMLqBtZ1EwO/exec';
+
+var TEAM = ['', 'Eizuddin', 'Runa', 'Ridhwan', 'Azfar', 'Supervisor'];
+var STATUSES = ['New', 'In Progress', 'On Hold', 'Completed', 'Cancelled'];
+/* ================================================= */
+
+var allJobs = [];
+var allRemarks = [];
+var currentTicket = null;
+var pendingPhoto = null; // {data, mime}
+
+/* ---------- identity ---------- */
+function myName(){
+  try{ return localStorage.getItem('om_receivedBy') || ''; }catch(e){ return ''; }
+}
+function updateWhoami(){
+  var n = myName();
+  document.getElementById('whoami').textContent = n ? (n + ' · change') : 'set your name';
+}
+function openNamePrompt(){
+  document.getElementById('nameInput').value = myName();
+  document.getElementById('nameOverlay').classList.add('open');
+}
+function saveName(){
+  var n = document.getElementById('nameInput').value.trim();
+  if(!n){ toast('Please type your name.'); return; }
+  try{ localStorage.setItem('om_receivedBy', n); }catch(e){}
+  document.getElementById('nameOverlay').classList.remove('open');
+  updateWhoami();
+  toast('Saved. Hi, ' + n + '!');
+}
+
+/* ---------- tabs ---------- */
+function showTab(which){
+  var isBoard = which === 'board';
+  document.getElementById('board').style.display = isBoard ? 'flex' : 'none';
+  document.getElementById('historyView').style.display = isBoard ? 'none' : 'block';
+  document.getElementById('tabBoard').classList.toggle('active', isBoard);
+  document.getElementById('tabHistory').classList.toggle('active', !isBoard);
+  if(!isBoard) renderHistory();
+}
+
+/* ---------- load & render ---------- */
+function loadJobs(){
+  setStatus('Loading…', false);
+  var btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  fetch(API_URL + '?action=getJobs')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data.status !== 'ok') throw new Error(data.message || 'API error');
+      allJobs = data.jobs || [];
+      allRemarks = data.remarks || [];
+      renderBoard();
+      renderStats();
+      if(document.getElementById('historyView').style.display === 'block') renderHistory();
+      setStatus('Live · ' + allJobs.length + ' job order(s) · updated ' + timeNow(), false);
+    })
+    .catch(function(err){
+      setStatus('Cannot reach the server. Check internet connection, then press Refresh. (' + err.message + ')', true);
+    })
+    .finally(function(){ btn.disabled = false; });
+}
+
+function isOpen(j){ return j.Status !== 'Completed' && j.Status !== 'Cancelled'; }
+function isOverdue(j){
+  if(!j.DueDate || !isOpen(j)) return false;
+  var due = new Date(j.DueDate);
+  var today = new Date(); today.setHours(0,0,0,0);
+  return due < today;
+}
+function isToday(d){
+  if(!d) return false;
+  var x = new Date(d), t = new Date();
+  return x.getFullYear() === t.getFullYear() && x.getMonth() === t.getMonth() && x.getDate() === t.getDate();
+}
+
+function renderStats(){
+  var open = allJobs.filter(isOpen).length;
+  var urgent = allJobs.filter(function(j){ return isOpen(j) && j.Priority === 'Urgent'; }).length;
+  var overdue = allJobs.filter(isOverdue).length;
+  var doneToday = allJobs.filter(function(j){ return j.Status === 'Completed' && isToday(j.LastUpdated); }).length;
+  var total = allJobs.length;
+
+  document.getElementById('stats').innerHTML =
+    stat(open, 'Open Jobs', '') +
+    stat(urgent, 'Urgent', urgent > 0 ? 'bad' : '') +
+    stat(overdue, 'Overdue', overdue > 0 ? 'bad' : '') +
+    stat(doneToday, 'Completed Today', doneToday > 0 ? 'good' : '') +
+    stat(total, 'Total Logged', '');
+}
+function stat(num, lbl, cls){
+  return '<div class="stat ' + cls + '"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>';
+}
+
+function renderBoard(){
+  var board = document.getElementById('board');
+  board.innerHTML = '';
+  STATUSES.forEach(function(st){
+    var jobs = allJobs.filter(function(j){ return (j.Status || 'New') === st; });
+    jobs.sort(function(a,b){ return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); });
+
+    var col = document.createElement('div');
+    col.className = 'col';
+    col.setAttribute('data-status', st);
+    col.innerHTML = '<div class="col-head">' + st + '<span class="count">' + jobs.length + '</span></div>';
+
+    var body = document.createElement('div');
+    body.className = 'col-body';
+    if(jobs.length === 0) body.innerHTML = '<div class="empty-col">No jobs here</div>';
+    jobs.forEach(function(j){ body.appendChild(makeCard(j)); });
+
+    col.appendChild(body);
+    board.appendChild(col);
+  });
+}
+
+function makeCard(j){
+  var card = document.createElement('div');
+  card.className = 'card';
+  card.onclick = function(){ openDetail(j.TicketNo); };
+
+  var tags = '';
+  if(isOverdue(j)) tags += '<span class="tag tag-overdue">OVERDUE</span>';
+  if(j.AssignedTo) tags += '<span class="tag tag-assignee">' + esc(j.AssignedTo) + '</span>';
+  if(j.Priority === 'High' || j.Priority === 'Urgent')
+    tags += '<span class="tag tag-priority-' + j.Priority + '">' + j.Priority + '</span>';
+  if(j.DueDate) tags += '<span class="tag tag-due">Due ' + fmtDate(j.DueDate) + '</span>';
+
+  card.innerHTML =
+    '<div class="tno">' + esc(j.TicketNo) + '</div>' +
+    '<div class="site">' + esc(j.Site || '(no site)') + '</div>' +
+    '<div class="desc">' + esc(j.Description || '') + '</div>' +
+    (tags ? '<div class="meta">' + tags + '</div>' : '');
+  return card;
+}
+
+/* ---------- history & reports ---------- */
+function renderHistory(){
+  // assignee filter options
+  var fa = document.getElementById('fAssignee');
+  if(fa.options.length === 0){
+    var opts = '<option value="">All technicians</option>';
+    TEAM.forEach(function(t){ if(t) opts += '<option>' + t + '</option>'; });
+    fa.innerHTML = opts;
+  }
+
+  var q = document.getElementById('fSearch').value.trim().toLowerCase();
+  var fs = document.getElementById('fStatus').value;
+  var fass = fa.value;
+
+  var list = allJobs.slice().sort(function(a,b){ return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); });
+  list = list.filter(function(j){
+    if(fs && j.Status !== fs) return false;
+    if(fass && j.AssignedTo !== fass) return false;
+    if(q){
+      var hay = (j.TicketNo + ' ' + j.Site + ' ' + j.Description + ' ' + j.ReportedBy).toLowerCase();
+      if(hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+
+  var html = list.map(function(j){
+    return '<div class="hitem" onclick="openDetail(\'' + j.TicketNo + '\')">' +
+      '<div class="top"><span class="tno">' + esc(j.TicketNo) + '</span>' +
+      '<span class="site">' + esc(j.Site || '') + '</span>' +
+      '<span class="tag tag-status">' + esc(j.Status) + '</span>' +
+      (isOverdue(j) ? '<span class="tag tag-overdue">OVERDUE</span>' : '') + '</div>' +
+      '<div class="sub">' + fmtDateTime(j.CreatedAt) + ' · via ' + esc(j.Channel || '—') +
+      (j.AssignedTo ? ' · ' + esc(j.AssignedTo) : '') + '</div></div>';
+  }).join('');
+  document.getElementById('historyList').innerHTML =
+    html || '<div class="empty-col">No jobs match the filter</div>';
+
+  // reports (always on full data)
+  var byStatus = {};
+  STATUSES.forEach(function(s){ byStatus[s] = 0; });
+  allJobs.forEach(function(j){ byStatus[j.Status] = (byStatus[j.Status] || 0) + 1; });
+  document.getElementById('repStatus').innerHTML = STATUSES.map(function(s){
+    return '<div class="rrow"><span>' + s + '</span><b>' + (byStatus[s] || 0) + '</b></div>';
+  }).join('');
+
+  var techHtml = '';
+  TEAM.forEach(function(t){
+    if(!t) return;
+    var open = allJobs.filter(function(j){ return j.AssignedTo === t && isOpen(j); }).length;
+    var done = allJobs.filter(function(j){ return j.AssignedTo === t && j.Status === 'Completed'; }).length;
+    techHtml += '<div class="rrow"><span>' + t + '</span><b>' + open + ' / ' + done + '</b></div>';
+  });
+  document.getElementById('repTech').innerHTML = techHtml;
+
+  var chans = {};
+  allJobs.forEach(function(j){ var c = j.Channel || '—'; chans[c] = (chans[c] || 0) + 1; });
+  document.getElementById('repChannel').innerHTML = Object.keys(chans).map(function(c){
+    return '<div class="rrow"><span>' + esc(c) + '</span><b>' + chans[c] + '</b></div>';
+  }).join('') || '<div class="rrow"><span>No data yet</span><b>0</b></div>';
+}
+
+/* ---------- new job ---------- */
+function openNewJob(){
+  fillTeamSelect('njAssigned');
+  document.getElementById('njReceivedBy').value = myName();
+  document.getElementById('newJobOverlay').classList.add('open');
+}
+function closeNewJob(){ document.getElementById('newJobOverlay').classList.remove('open'); }
+
+function saveNewJob(){
+  var site = val('njSite'), desc = val('njDesc'), recBy = val('njReceivedBy');
+  if(!site || !desc || !recBy){ toast('Please fill Site, Description and Received By.'); return; }
+  try{ localStorage.setItem('om_receivedBy', recBy); }catch(e){}
+  updateWhoami();
+
+  var btn = document.getElementById('btnSaveJob');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Saving…';
+
+  apiPost({
+    action: 'addJob',
+    job: {
+      Channel: val('njChannel'), Site: site, Description: desc,
+      ReportedBy: val('njReportedBy'), ReceivedBy: recBy,
+      AssignedTo: val('njAssigned'), Priority: val('njPriority'),
+      Status: 'New', DueDate: val('njDue')
+    }
+  }, function(data){
+    btn.disabled = false; btn.textContent = 'Save Job Order';
+    if(data.status === 'ok'){
+      closeNewJob(); clearNewJobForm();
+      toast('Saved. Ticket: ' + data.ticketNo);
+      loadJobs();
+    } else toast('Error: ' + data.message);
+  }, function(err){
+    btn.disabled = false; btn.textContent = 'Save Job Order';
+    toast('Could not save: ' + err.message);
+  });
+}
+
+function clearNewJobForm(){
+  ['njSite','njDesc','njReportedBy','njDue'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('njPriority').value = 'Normal';
+  document.getElementById('njAssigned').value = '';
+}
+
+/* ---------- detail ---------- */
+function openDetail(ticketNo){
+  var j = allJobs.find(function(x){ return x.TicketNo === ticketNo; });
+  if(!j) return;
+  currentTicket = ticketNo;
+  clearPendingPhoto();
+
+  document.getElementById('dTicket').textContent = j.TicketNo;
+  document.getElementById('dCreated').textContent =
+    'Created ' + fmtDateTime(j.CreatedAt) + ' via ' + (j.Channel || '—');
+  document.getElementById('dSite').textContent = j.Site || '(no site)';
+  document.getElementById('dDesc').textContent = j.Description || '';
+  document.getElementById('dPeople').textContent =
+    'Reported by: ' + (j.ReportedBy || '—') + '  ·  Received by: ' + (j.ReceivedBy || '—');
+
+  fillTeamSelect('dAssigned');
+  document.getElementById('dStatus').value = j.Status || 'New';
+  document.getElementById('dAssigned').value = j.AssignedTo || '';
+  document.getElementById('dPriority').value = j.Priority || 'Normal';
+  document.getElementById('dDue').value = j.DueDate ? String(j.DueDate).substring(0,10) : '';
+
+  renderRemarks(ticketNo);
+  document.getElementById('detailOverlay').classList.add('open');
+}
+function closeDetail(){
+  document.getElementById('detailOverlay').classList.remove('open');
+  currentTicket = null;
+  clearPendingPhoto();
+}
+
+function renderRemarks(ticketNo){
+  var list = allRemarks.filter(function(r){ return r.TicketNo === ticketNo; });
+  list.sort(function(a,b){ return String(a.Timestamp).localeCompare(String(b.Timestamp)); });
+  var html = list.map(function(r, idx){
+    var photo = '';
+    if(r.PhotoId){
+      photo = '<button class="photobtn" onclick="loadPhoto(this, \'' + r.PhotoId + '\')">📷 View photo</button>';
+    }
+    return '<div class="remark"><div class="rmeta">' + fmtDateTime(r.Timestamp) +
+           (r.By ? ' — ' + esc(r.By) : '') + '</div><div class="rtext">' + esc(r.Remark) + '</div>' +
+           photo + '</div>';
+  }).join('');
+  document.getElementById('dRemarks').innerHTML = html || '<div class="empty-col">No remarks yet</div>';
+}
+
+function loadPhoto(btn, photoId){
+  btn.disabled = true; btn.textContent = 'Loading photo…';
+  fetch(API_URL + '?action=getPhoto&id=' + encodeURIComponent(photoId))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data.status !== 'ok') throw new Error(data.message || 'error');
+      var img = document.createElement('img');
+      img.src = 'data:' + data.mime + ';base64,' + data.data;
+      btn.parentNode.replaceChild(img, btn);
+    })
+    .catch(function(err){
+      btn.disabled = false; btn.textContent = '📷 View photo (retry)';
+      toast('Could not load photo: ' + err.message);
+    });
+}
+
+/* photo attach */
+function photoChosen(){
+  var f = document.getElementById('dPhoto').files[0];
+  if(!f) return;
+  compressImage(f, function(dataUrl){
+    pendingPhoto = {
+      data: dataUrl.split(',')[1],
+      mime: 'image/jpeg'
+    };
+    document.getElementById('dPhotoName').textContent = f.name + ' (attached)';
+    var prev = document.getElementById('dPhotoPrev');
+    prev.src = dataUrl; prev.style.display = 'block';
+  });
+}
+function clearPendingPhoto(){
+  pendingPhoto = null;
+  document.getElementById('dPhoto').value = '';
+  document.getElementById('dPhotoName').textContent = '';
+  var prev = document.getElementById('dPhotoPrev');
+  prev.style.display = 'none'; prev.src = '';
+}
+function compressImage(file, cb){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = new Image();
+    img.onload = function(){
+      var maxW = 1024;
+      var scale = Math.min(1, maxW / img.width);
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      cb(canvas.toDataURL('image/jpeg', 0.72));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function submitRemark(){
+  if(!currentTicket) return;
+  var text = val('dNewRemark');
+  if(!text && !pendingPhoto){ toast('Type a remark or attach a photo first.'); return; }
+  if(!text) text = '(photo attached)';
+
+  var btn = document.getElementById('btnAddRemark');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+
+  var payload = { action:'addRemark', ticketNo: currentTicket, by: myName(), remark: text };
+  if(pendingPhoto) payload.photo = pendingPhoto;
+
+  apiPost(payload,
+  function(data){
+    btn.disabled = false; btn.textContent = 'Add';
+    if(data.status === 'ok'){
+      document.getElementById('dNewRemark').value = '';
+      allRemarks.push({TicketNo: currentTicket, Timestamp: new Date().toISOString(),
+                       By: myName(), Remark: text, PhotoId: data.photoId || ''});
+      clearPendingPhoto();
+      renderRemarks(currentTicket);
+      toast('Remark added');
+    } else toast('Error: ' + data.message);
+  },
+  function(err){
+    btn.disabled = false; btn.textContent = 'Add';
+    toast('Could not add remark: ' + err.message);
+  });
+}
+
+function saveChanges(){
+  if(!currentTicket) return;
+  var btn = document.getElementById('btnSaveChanges');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Saving…';
+
+  apiPost({
+    action: 'updateJob',
+    ticketNo: currentTicket,
+    updates: {
+      Status: val('dStatus'), AssignedTo: val('dAssigned'),
+      Priority: val('dPriority'), DueDate: val('dDue')
+    }
+  }, function(data){
+    btn.disabled = false; btn.textContent = 'Save Changes';
+    if(data.status === 'ok'){ closeDetail(); toast('Updated'); loadJobs(); }
+    else toast('Error: ' + data.message);
+  }, function(err){
+    btn.disabled = false; btn.textContent = 'Save Changes';
+    toast('Could not save: ' + err.message);
+  });
+}
+
+/* ---------- helpers ---------- */
+function apiPost(payload, onOk, onErr){
+  fetch(API_URL, { method:'POST', body: JSON.stringify(payload) })
+    .then(function(r){ return r.json(); })
+    .then(onOk)
+    .catch(onErr);
+}
+function fillTeamSelect(id){
+  var sel = document.getElementById(id);
+  sel.innerHTML = TEAM.map(function(t){
+    return '<option value="' + t + '">' + (t || '— Unassigned —') + '</option>';
+  }).join('');
+}
+function val(id){ return document.getElementById(id).value.trim(); }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(d){
+  var x = new Date(d); if(isNaN(x)) return String(d);
+  return x.toLocaleDateString('en-MY', {day:'numeric', month:'short'});
+}
+function fmtDateTime(d){
+  var x = new Date(d); if(isNaN(x)) return String(d);
+  return x.toLocaleString('en-MY', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+function timeNow(){ return new Date().toLocaleTimeString('en-MY', {hour:'2-digit', minute:'2-digit'}); }
+function setStatus(msg, isErr){
+  var bar = document.getElementById('statusBar');
+  bar.className = isErr ? 'err' : '';
+  document.getElementById('statusText').textContent = msg;
+}
+var toastTimer = null;
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 3500);
+}
+
+document.getElementById('newJobOverlay').addEventListener('click', function(e){ if(e.target === this) closeNewJob(); });
+document.getElementById('detailOverlay').addEventListener('click', function(e){ if(e.target === this) closeDetail(); });
+
+setInterval(loadJobs, 120000);
+
+updateWhoami();
+if(!myName()) openNamePrompt();
+loadJobs();
+</script>
+</body>
+</html>
